@@ -33,7 +33,26 @@ council.sh のパスを特定し、ステータスを確認してください:
 council.sh status
 ```
 
-Codex CLIが見つからない場合はユーザーに報告し、インストール方法を案内してください。
+#### Codex CLI が未インストールの場合
+
+`council.sh status` の出力に `CODEX_NOT_INSTALLED` が含まれていたら、以下のフローを実行:
+
+1. AskUserQuestion でユーザーに通知・確認:
+   - **Install now** — `npm install -g @openai/codex` を実行してインストール
+   - **Skip** — Codex なしで続行（矛盾チェックモードのみ利用可能）
+
+2. Install now を選択された場合:
+   ```bash
+   npm install -g @openai/codex
+   ```
+
+3. インストール後、認証が必要。AskUserQuestion で認証方法を確認:
+   - **API Key** — `OPENAI_API_KEY` 環境変数が設定済みなら `printenv OPENAI_API_KEY | codex login --with-api-key` を実行
+   - **Skip auth** — 環境変数に `OPENAI_API_KEY` が既に設定されていればログイン不要で動作する場合がある。スキップして続行
+
+   **注意:** `codex login`（ブラウザ認証）はターミナルからのリダイレクトが必要なため、Claude Code 内からは実行しない。ブラウザ認証が必要な場合はユーザーに手動実行を案内する。
+
+4. `council.sh status` を再実行して確認
 
 ### 3. Load Skill Modules
 

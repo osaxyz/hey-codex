@@ -29,28 +29,49 @@ USAGE
   exit 1
 }
 
+# --- Check Codex CLI availability ---
+# Returns: 0 = installed, 1 = not installed
+# Output: JSON-like status to stdout
+check_codex() {
+  if command -v codex &>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
 # --- Status mode ---
 do_status() {
   echo "=== Codex CLI Status ==="
 
-  # Check if codex is installed
-  if ! command -v codex &>/dev/null; then
-    echo "ERROR: codex CLI not found in PATH"
-    echo "Install: npm install -g @openai/codex"
+  if ! check_codex; then
+    echo "CODEX_NOT_INSTALLED"
+    echo "Codex CLI is not installed."
+    echo ""
+    echo "To install:"
+    echo "  npm install -g @openai/codex"
+    echo ""
+    echo "After install, authenticate with one of:"
+    echo "  codex login                                        # Browser-based (ChatGPT account)"
+    echo "  printenv OPENAI_API_KEY | codex login --with-api-key  # API key"
     exit 1
   fi
 
   # Version
   echo "Version: $(codex --version 2>&1 || echo 'unknown')"
 
-  # Check config
+  # Auth status
+  local auth_status
+  auth_status=$(codex login status 2>&1 || true)
+  echo "Auth: ${auth_status}"
+
+  # Config (optional)
   CODEX_CONFIG="${HOME}/.codex/config.toml"
   if [ -f "${CODEX_CONFIG}" ]; then
     echo "Config: ${CODEX_CONFIG} (found)"
     MODEL=$(grep '^model ' "${CODEX_CONFIG}" | head -1 | sed 's/model *= *"\([^"]*\)"/\1/')
-    echo "Model: ${MODEL:-unknown}"
+    echo "Model: ${MODEL:-default}"
   else
-    echo "Config: not found"
+    echo "Config: none (using defaults)"
   fi
 
   # Check AGENTS.md in workdir
@@ -116,6 +137,13 @@ do_codex() {
   local prompt_file="$2"
   local workdir="$3"
   local sandbox_flag
+
+  # Check codex is available
+  if ! check_codex; then
+    echo "CODEX_NOT_INSTALLED"
+    echo "ERROR: Codex CLI is not installed. Run: npm install -g @openai/codex"
+    exit 1
+  fi
 
   # Validate prompt file
   if [ ! -f "${prompt_file}" ]; then

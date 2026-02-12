@@ -1,11 +1,11 @@
-# /hey-codex - Claude Code x Codex CLI Council
+# /hey-codex - Claude Code × Codex CLI
 
 Claude Code 向けの Codex CLI 合議・実装委譲スキル。
 `/hey-codex` コマンドで起動し、設計判断やコード生成を Codex CLI に自動委譲する。
 
 ## 概要
 
-Claude Code での作業中、設計判断やコード生成で Codex CLI（GPT-5）にセカンドオピニオンを求めたり、実装を委譲するスキル。MCP 不使用、Bash ツールで `codex exec` を直接実行する。
+Claude Code での作業中、設計判断やコード生成で [Codex CLI](https://github.com/openai/codex)（GPT-5.3-Codex）にセカンドオピニオンを求めたり、実装を委譲するスキル。MCP 不使用、Bash ツールで `codex exec` を直接実行する。
 
 **主な機能:**
 
@@ -26,10 +26,35 @@ curl -fsSL https://osa.xyz/hey-codex/install.sh | bash
 1. リポジトリ直下（`.claude/commands/`）— `.claude/` が存在する場合
 2. ユーザーホーム（`~/.claude/commands/`）— それ以外
 
-### 前提条件
+### 前提条件: Codex CLI のセットアップ
 
-- [Codex CLI](https://github.com/openai/codex) がインストール済みであること
-- `~/.codex/config.toml` が設定済みであること
+> **Codex CLI が未インストールでも `/hey-codex` は起動可能。** 起動時に未検出なら、インストールするか確認される。
+
+#### 1. Codex CLI のインストール
+
+```bash
+npm install -g @openai/codex    # latest: 0.99.0
+```
+
+> Node.js 22+ が必要。
+
+#### 2. 認証
+
+```bash
+# ブラウザ認証（ChatGPT / OpenAI アカウント）
+codex login
+
+# または API キー
+export OPENAI_API_KEY="sk-..."
+```
+
+#### 3. `~/.codex/config.toml`（オプション）
+
+未設定でもデフォルト値で動作する。モデルを変えたい場合のみ:
+
+```toml
+model = "gpt-5.3-codex"    # デフォルト: gpt-5.3-codex
+```
 
 ## 使い方
 
@@ -111,6 +136,6 @@ council.sh implement prompt.txt /path/to/project
 
 ## 技術スタック
 
-- Claude Code（Claude Opus 4.6）
-- Codex CLI（GPT-5）
+- [Claude Code](https://claude.com/claude-code)（Claude Opus 4.6）
+- [Codex CLI](https://github.com/openai/codex) 0.99.0+（デフォルト: [gpt-5.3-codex](https://openai.com/index/introducing-gpt-5-3-codex/)）
 - Bash（MCP 不使用）
