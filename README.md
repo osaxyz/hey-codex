@@ -131,8 +131,8 @@ council.sh implement prompt.txt /path/to/project
 
 プロジェクトに `AGENTS.md` を配置すると、Codex CLI がそれに従って作業する。テンプレートは `examples/` に用意:
 
-- `examples/AGENTS.md` — 英語版
-- `examples/AGENTS.ja.md` — 日本語版
+- `examples/AGENTS.md` — 日本語版
+- `examples/AGENTS.en.md` — 英語版
 
 ## 技術スタック
 

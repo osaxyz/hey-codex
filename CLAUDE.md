@@ -1,4 +1,4 @@
-# hey-codex: Claude Code x Codex CLI Council
+# hey-codex: Claude Code × Codex CLI Council
 
 このプロジェクトは Claude Code と Codex CLI の合議・委譲スキルです。
 
