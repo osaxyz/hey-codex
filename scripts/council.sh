@@ -106,7 +106,7 @@ merge_prompt() {
   local workdir="$2"
   local merged_file
 
-  merged_file=$(mktemp /tmp/codex-merged-XXXXXX.txt)
+  merged_file=$(mktemp /tmp/codex-merged-XXXXXX)
 
   # Try to find AGENTS.md
   local agents_md
@@ -171,7 +171,7 @@ do_codex() {
 
   # Output file for Codex response
   local output_file
-  output_file=$(mktemp /tmp/codex-output-XXXXXX.md)
+  output_file=$(mktemp /tmp/codex-output-XXXXXX)
 
   echo "[council] Mode: ${mode} (sandbox: ${sandbox_flag})"
   echo "[council] Workdir: ${workdir}"

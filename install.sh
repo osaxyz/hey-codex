@@ -6,8 +6,25 @@ BRANCH="main"
 TARBALL_URL="${REPO_URL}/archive/refs/heads/${BRANCH}.tar.gz"
 TMP_DIR="$(mktemp -d)"
 
+# ------------------------------------
+# 非対話モード検出
+# /dev/tty が使えない場合 (Claude Code 等) は非対話モードで動作
+# 環境変数 HEY_CODEX_INSTALL_DIR で制御可能:
+#   "local"  → .claude/ (デフォルト)
+#   "global" → ~/.claude/
+# HEY_CODEX_INSTALL_CODEX=1 で Codex CLI も自動インストール
+# ------------------------------------
+IS_INTERACTIVE=true
+if ! exec 9>/dev/tty 2>/dev/null; then
+    IS_INTERACTIVE=false
+else
+    exec 9>&-
+fi
+
 cleanup() {
-    printf '\e[?25h' > /dev/tty 2>/dev/null || true
+    if [ "${IS_INTERACTIVE}" = true ]; then
+        printf '\e[?25h' > /dev/tty 2>/dev/null || true
+    fi
     rm -rf "${TMP_DIR}"
 }
 trap cleanup EXIT
@@ -18,6 +35,7 @@ echo ""
 
 # ------------------------------------
 # 1. 対話メニュー (矢印キー / vim / Enter)
+#    非対話モードでは使用されない
 # ------------------------------------
 select_option() {
     local options=("$@")
@@ -64,22 +82,36 @@ select_option() {
 # ------------------------------------
 # 2. インストール先の選択
 # ------------------------------------
-echo "インストール先を選択してください (↑↓/jk で移動, Enter で決定):"
-echo ""
+if [ "${IS_INTERACTIVE}" = true ]; then
+    echo "インストール先を選択してください (↑↓/jk で移動, Enter で決定):"
+    echo ""
 
-select_option \
-    "このリポジトリ直下 (.claude/)" \
-    "ユーザーホーム (~/.claude/)"
-choice=$?
+    select_option \
+        "このリポジトリ直下 (.claude/)" \
+        "ユーザーホーム (~/.claude/)"
+    choice=$?
 
-case "${choice}" in
-    0)
-        BASE_DIR="$(pwd)/.claude"
-        ;;
-    1)
-        BASE_DIR="${HOME}/.claude"
-        ;;
-esac
+    case "${choice}" in
+        0)
+            BASE_DIR="$(pwd)/.claude"
+            ;;
+        1)
+            BASE_DIR="${HOME}/.claude"
+            ;;
+    esac
+else
+    # 非対話モード: 環境変数 or デフォルト(local)
+    case "${HEY_CODEX_INSTALL_DIR:-local}" in
+        global)
+            BASE_DIR="${HOME}/.claude"
+            echo "  インストール先: ~/.claude/ (非対話モード: global)"
+            ;;
+        *)
+            BASE_DIR="$(pwd)/.claude"
+            echo "  インストール先: .claude/ (非対話モード: local)"
+            ;;
+    esac
+fi
 
 INSTALL_DIR="${BASE_DIR}/hey-codex"
 COMMANDS_DIR="${BASE_DIR}/commands"
@@ -164,25 +196,37 @@ if command -v codex &>/dev/null; then
     echo "  Codex CLI: ${codex_ver}"
 else
     echo "  Codex CLI: 未インストール"
-    echo ""
-    echo "  Codex CLI をインストールしますか? (↑↓/jk で移動, Enter で決定):"
-    echo ""
 
-    select_option \
-        "はい (npm install -g @openai/codex)" \
-        "スキップ"
-    codex_choice=$?
-
-    if [ "${codex_choice}" -eq 0 ]; then
+    if [ "${IS_INTERACTIVE}" = true ]; then
         echo ""
-        echo "  Codex CLI をインストール中..."
+        echo "  Codex CLI をインストールしますか? (↑↓/jk で移動, Enter で決定):"
+        echo ""
+
+        select_option \
+            "はい (npm install -g @openai/codex)" \
+            "スキップ"
+        codex_choice=$?
+
+        if [ "${codex_choice}" -eq 0 ]; then
+            echo ""
+            echo "  Codex CLI をインストール中..."
+            npm install -g @openai/codex
+            echo ""
+            codex_ver="$(codex --version 2>&1 || echo 'unknown')"
+            echo "  Codex CLI: ${codex_ver}"
+        else
+            echo ""
+            echo "  スキップしました。後で npm install -g @openai/codex で入れてください。"
+        fi
+    elif [ "${HEY_CODEX_INSTALL_CODEX:-0}" = "1" ]; then
+        echo ""
+        echo "  Codex CLI をインストール中... (非対話モード)"
         npm install -g @openai/codex
         echo ""
         codex_ver="$(codex --version 2>&1 || echo 'unknown')"
         echo "  Codex CLI: ${codex_ver}"
     else
-        echo ""
-        echo "  スキップしました。後で npm install -g @openai/codex で入れてください。"
+        echo "  スキップ (非対話モード: HEY_CODEX_INSTALL_CODEX=1 で自動インストール)"
     fi
 fi
 
