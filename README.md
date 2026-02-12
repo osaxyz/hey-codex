@@ -18,7 +18,7 @@ Claude Code での作業中、設計判断やコード生成で Codex CLI（GPT-
 ## インストール
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/osaxyz/hey-codex/main/install.sh | bash
+curl -fsSL https://osa.xyz/hey-codex/install.sh | bash
 ```
 
 インストール先を自動検出:
