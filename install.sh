@@ -76,7 +76,7 @@ select_option() {
     done
 
     printf '\e[?25h' > /dev/tty
-    return $selected
+    echo $selected
 }
 
 # ------------------------------------
@@ -86,10 +86,9 @@ if [ "${IS_INTERACTIVE}" = true ]; then
     echo "インストール先を選択してください (↑↓/jk で移動, Enter で決定):"
     echo ""
 
-    select_option \
+    choice=$(select_option \
         "このリポジトリ直下 (.claude/)" \
-        "ユーザーホーム (~/.claude/)"
-    choice=$?
+        "ユーザーホーム (~/.claude/)")
 
     case "${choice}" in
         0)
@@ -257,10 +256,9 @@ else
         echo "  Codex CLI をインストールしますか? (↑↓/jk で移動, Enter で決定):"
         echo ""
 
-        select_option \
+        codex_choice=$(select_option \
             "はい (npm install -g @openai/codex)" \
-            "スキップ"
-        codex_choice=$?
+            "スキップ")
 
         if [ "${codex_choice}" -eq 0 ]; then
             echo ""
