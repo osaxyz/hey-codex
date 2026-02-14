@@ -1,21 +1,25 @@
-# hey-codex: Claude Code × Codex CLI Council
+# hey-codex: Codex CLI Auto-Delegation
 
-このプロジェクトは Claude Code と Codex CLI の合議・委譲スキルです。
+Claude Code の hooks と rules による Codex CLI 自動委譲スキルです。
 
-## Auto-delegation Setup
+## 仕組み
 
-council.sh を使って Codex CLI に自動委譲を行います。
+hooks がイベント駆動で委譲を判定し、rules が常時適用の判断基準を提供します。
 
-### council.sh のパス
+### Rules (`rules/codex-delegation.md`)
+- 常時適用の委譲判断ルール
+- MUST / SHOULD / MUST NOT の3段階で判断
 
-```
-# 優先順位:
-1. .claude/hey-codex/scripts/council.sh  (プロジェクトローカル)
-2. ~/.claude/hey-codex/scripts/council.sh (ユーザーグローバル)
-3. scripts/council.sh                     (開発時)
-```
+### Hooks (`hooks/`)
+| フック | イベント | 役割 |
+|--------|----------|------|
+| `agent-router.ts` | UserPromptSubmit | プロンプトのキーワードから委譲を判定 |
+| `check-codex-before-write.ts` | PreToolUse (Edit\|Write) | CI/CD・シェルスクリプト編集時にリマインド |
+| `post-implementation-review.ts` | PostToolUse (Edit\|Write) | 3+ファイル編集後にレビュー提案 |
 
-### 使い方
+### council.sh
+
+Codex CLI の実行ラッパー。委譲実行時に使用します。
 
 ```bash
 # ステータス確認
@@ -28,18 +32,22 @@ council.sh consult /tmp/codex-prompt.txt /path/to/project
 council.sh implement /tmp/codex-prompt.txt /path/to/project
 ```
 
-### 自動委譲フロー
+パス解決の優先順位:
+1. `.claude/hey-codex/scripts/council.sh` (プロジェクトローカル)
+2. `~/.claude/hey-codex/scripts/council.sh` (ユーザーグローバル)
+3. `scripts/council.sh` (開発時)
 
-1. プロンプトファイルを `/tmp/codex-prompt-XXXXX.txt` に書き出し
-2. `council.sh <mode> <prompt_file> <workdir>` を実行
-3. 結果を読み取り、Codex Council Report フォーマットで報告
+## 無効化方法
 
-### 委譲判断基準
+```bash
+# ルールを無効化
+rm .claude/rules/codex-delegation.md
 
-詳細は `commands/skills/council-protocol.md` を参照。
+# フックを無効化
+rm -rf .claude/hooks/hey-codex/
 
-- **合議 (consult)**: アーキテクチャ判断、トレードオフ不明確、セキュリティ判断
-- **実装委譲 (implement)**: ボイラープレート生成、大量コード、パターン反復
+# settings.json から hey-codex フックを手動で削除
+```
 
 ## Development
 

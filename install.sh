@@ -114,11 +114,9 @@ else
 fi
 
 INSTALL_DIR="${BASE_DIR}/hey-codex"
-COMMANDS_DIR="${BASE_DIR}/commands"
 
 echo ""
-echo "  コマンド: ${COMMANDS_DIR}/"
-echo "  スクリプト: ${INSTALL_DIR}/"
+echo "  インストール先: ${INSTALL_DIR}/"
 echo ""
 
 # ------------------------------------
@@ -156,15 +154,75 @@ echo "  リモート: ${remote_version}"
 echo ""
 
 # ------------------------------------
-# 5. コマンドファイルのインストール
+# 5. v0.5.0 以前の不要ファイルを削除
 # ------------------------------------
-mkdir -p "${COMMANDS_DIR}/skills"
+HOOKS_DIR="${BASE_DIR}/hooks/hey-codex"
+legacy_removed=0
 
-if [ -d "${TMP_DIR}/commands" ]; then
-    cp "${TMP_DIR}/commands/hey-codex.md" "${COMMANDS_DIR}/hey-codex.md"
-    cp "${TMP_DIR}/commands/skills/"*.md "${COMMANDS_DIR}/skills/"
-else
-    echo "  警告: commands/ ディレクトリが見つかりません"
+# 手動コマンド (v0.6.0 で廃止)
+for f in \
+    "${BASE_DIR}/commands/hey-codex.md" \
+    "${BASE_DIR}/commands/skills/council-protocol.md" \
+    "${BASE_DIR}/commands/skills/contradiction-check.md"; do
+    if [ -f "$f" ]; then
+        rm -f "$f"
+        legacy_removed=$((legacy_removed + 1))
+    fi
+done
+# 空になった commands ディレクトリを削除
+rmdir "${BASE_DIR}/commands/skills" 2>/dev/null || true
+rmdir "${BASE_DIR}/commands" 2>/dev/null || true
+
+# examples (v0.6.0 で廃止)
+if [ -d "${INSTALL_DIR}/examples" ]; then
+    rm -rf "${INSTALL_DIR}/examples"
+    legacy_removed=$((legacy_removed + 1))
+fi
+
+# Python フック → TypeScript に移行済み
+for f in "${HOOKS_DIR}/"*.py; do
+    [ -f "$f" ] || continue
+    rm -f "$f"
+    legacy_removed=$((legacy_removed + 1))
+done
+
+# settings.json から旧 python3 フックを除去
+SETTINGS_FILE="${BASE_DIR}/settings.json"
+if [ -f "${SETTINGS_FILE}" ]; then
+    has_python=$(node -e "
+const fs = require('fs');
+const s = JSON.parse(fs.readFileSync('${SETTINGS_FILE}', 'utf-8'));
+let found = false;
+for (const entries of Object.values(s.hooks || {})) {
+    for (const entry of entries) {
+        for (const h of (entry.hooks || [])) {
+            if ((h.command || '').includes('python3')) { found = true; }
+        }
+    }
+}
+console.log(found ? '1' : '0');
+" 2>/dev/null || echo "0")
+
+    if [ "${has_python}" = "1" ]; then
+        node -e "
+const fs = require('fs');
+const s = JSON.parse(fs.readFileSync('${SETTINGS_FILE}', 'utf-8'));
+for (const [event, entries] of Object.entries(s.hooks || {})) {
+    s.hooks[event] = entries.filter(entry => {
+        const hooks = entry.hooks || [];
+        return !hooks.some(h => (h.command || '').includes('python3'));
+    });
+    if (s.hooks[event].length === 0) delete s.hooks[event];
+}
+fs.writeFileSync('${SETTINGS_FILE}', JSON.stringify(s, null, 2) + '\n');
+" 2>/dev/null
+        legacy_removed=$((legacy_removed + 1))
+    fi
+fi
+
+if [ "${legacy_removed}" -gt 0 ]; then
+    echo "  旧バージョンのファイルを ${legacy_removed} 件削除しました"
+    echo ""
 fi
 
 # ------------------------------------
@@ -178,14 +236,11 @@ if [ -d "${TMP_DIR}/scripts" ]; then
 fi
 
 # ------------------------------------
-# 7. バージョンファイル + examples
+# 7. バージョンファイル
 # ------------------------------------
 if [ -f "${REMOTE_VERSION_FILE}" ]; then
     cp "${REMOTE_VERSION_FILE}" "${INSTALL_DIR}/VERSION"
 fi
-
-mkdir -p "${INSTALL_DIR}/examples"
-cp "${TMP_DIR}/examples/"* "${INSTALL_DIR}/examples/" 2>/dev/null || true
 
 # ------------------------------------
 # 8. Codex CLI チェック
@@ -230,8 +285,106 @@ else
     fi
 fi
 
+# ------------------------------------
+# 9. ルールのインストール
+# ------------------------------------
+RULES_DIR="${BASE_DIR}/rules"
+mkdir -p "${RULES_DIR}"
+
+if [ -f "${TMP_DIR}/rules/codex-delegation.md" ]; then
+    cp "${TMP_DIR}/rules/codex-delegation.md" "${RULES_DIR}/codex-delegation.md"
+    echo "  ルール: ${RULES_DIR}/codex-delegation.md"
+else
+    echo "  警告: rules/codex-delegation.md が見つかりません"
+fi
+
+# ------------------------------------
+# 10. フックのインストール
+# ------------------------------------
+mkdir -p "${HOOKS_DIR}"
+
+if [ -d "${TMP_DIR}/hooks" ]; then
+    for hook_file in "${TMP_DIR}/hooks/"*.ts; do
+        [ -f "${hook_file}" ] || continue
+        hook_name="$(basename "${hook_file}")"
+        cp "${hook_file}" "${HOOKS_DIR}/${hook_name}"
+        chmod +x "${HOOKS_DIR}/${hook_name}"
+    done
+    echo "  フック: ${HOOKS_DIR}/"
+else
+    echo "  警告: hooks/ ディレクトリが見つかりません"
+fi
+
+# ------------------------------------
+# 11. settings.json マージ
+# ------------------------------------
+HOOKS_TEMPLATE="${TMP_DIR}/settings/hooks.json"
+
+if [ -f "${HOOKS_TEMPLATE}" ]; then
+    # Replace __HOOKS_DIR__ placeholder with actual path
+    HOOKS_DIR_ESCAPED=$(echo "${HOOKS_DIR}" | sed 's/[&/\]/\\&/g')
+    MERGED_TEMPLATE=$(mktemp /tmp/hey-codex-hooks-XXXXXX.json)
+    sed "s|__HOOKS_DIR__|${HOOKS_DIR}|g" "${HOOKS_TEMPLATE}" > "${MERGED_TEMPLATE}"
+
+    if [ ! -f "${SETTINGS_FILE}" ]; then
+        # No existing settings — use template directly
+        cp "${MERGED_TEMPLATE}" "${SETTINGS_FILE}"
+        echo "  設定: ${SETTINGS_FILE} (新規作成)"
+    else
+        # Existing settings — deep merge with node
+        cp "${SETTINGS_FILE}" "${SETTINGS_FILE}.bak.hey-codex"
+        node -e "
+const fs = require('fs');
+
+const existing = JSON.parse(fs.readFileSync('${SETTINGS_FILE}', 'utf-8'));
+const newHooks = JSON.parse(fs.readFileSync('${MERGED_TEMPLATE}', 'utf-8'));
+
+// Ensure hooks key exists
+if (!existing.hooks) existing.hooks = {};
+
+// Merge each event type
+for (const [event, eventEntries] of Object.entries(newHooks.hooks || {})) {
+    if (!existing.hooks[event]) {
+        existing.hooks[event] = eventEntries;
+        continue;
+    }
+
+    // Check for duplicates by command path
+    const existingCommands = new Set();
+    for (const entry of existing.hooks[event]) {
+        for (const h of (entry.hooks || [])) {
+            existingCommands.add(h.command || '');
+        }
+    }
+
+    for (const newEntry of eventEntries) {
+        let isDup = false;
+        for (const h of (newEntry.hooks || [])) {
+            if (existingCommands.has(h.command || '')) {
+                isDup = true;
+                break;
+            }
+        }
+        if (!isDup) existing.hooks[event].push(newEntry);
+    }
+}
+
+fs.writeFileSync('${SETTINGS_FILE}', JSON.stringify(existing, null, 2) + '\n');
+console.log('  設定: ${SETTINGS_FILE} (マージ完了)');
+" 2>&1
+    fi
+
+    rm -f "${MERGED_TEMPLATE}"
+else
+    echo "  警告: settings/hooks.json テンプレートが見つかりません"
+fi
+
 echo ""
 echo "  [hey-codex] インストール完了 (${remote_version})"
 echo ""
-echo "  使い方: Claude Code 内で /hey-codex を実行"
+echo "  自動委譲が有効になりました（hooks + rules）"
+echo ""
+echo "  無効化:"
+echo "    rm ${RULES_DIR}/codex-delegation.md"
+echo "    rm -rf ${HOOKS_DIR}"
 echo ""

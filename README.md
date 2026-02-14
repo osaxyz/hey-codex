@@ -1,19 +1,18 @@
-# /hey-codex - Claude Code × Codex CLI
+# hey-codex — Codex CLI Auto-Delegation for Claude Code
 
-Claude Code 向けの Codex CLI 合議・実装委譲スキル。
-`/hey-codex` コマンドで起動し、設計判断やコード生成を Codex CLI に自動委譲する。
+Claude Code の **hooks** と **rules** を活用し、[Codex CLI](https://github.com/openai/codex)（GPT-5.3-Codex）への自動委譲を行うスキル。MCP 不使用、Bash ツールで `codex exec` を直接実行する。
 
 ## 概要
 
-Claude Code での作業中、設計判断やコード生成で [Codex CLI](https://github.com/openai/codex)（GPT-5.3-Codex）にセカンドオピニオンを求めたり、実装を委譲するスキル。MCP 不使用、Bash ツールで `codex exec` を直接実行する。
+Claude Code での作業中、hooks がイベント駆動で Codex CLI への委譲を判定し、rules が常時適用の判断基準を提供します。
 
-**主な機能:**
+**委譲判断の3段階:**
 
-- **合議 (Consult)** — アーキテクチャ・設計判断を Codex に相談し、Claude Code の見解と比較
-- **実装委譲 (Implement)** — ボイラープレートや大量コード生成を Codex に委譲
-- **矛盾チェック (Check)** — AGENTS.md と CLAUDE.md の矛盾を検出・報告
-- AGENTS.md があれば Codex がそれに従う（プロンプトに自動注入）
-- 起動時に VERSION チェックで自動アップデート
+| レベル | 条件 | 動作 |
+|--------|------|------|
+| **MUST** | ターミナル操作、CI/CD、プロトタイプ、2回以上の失敗 | 自動委譲を推奨 |
+| **SHOULD** | 設計レビュー、3+ファイル新機能、並行処理、API統合 | ユーザーに提案 |
+| **MUST NOT** | リファクタリング、セキュリティ、レガシー移行、単純編集 | Claude で処理 |
 
 ## インストール
 
@@ -21,80 +20,61 @@ Claude Code での作業中、設計判断やコード生成で [Codex CLI](http
 curl -fsSL https://osa.xyz/hey-codex/install.sh | bash
 ```
 
-インストール先を自動検出:
+### 前提条件
 
-1. リポジトリ直下（`.claude/commands/`）— `.claude/` が存在する場合
-2. ユーザーホーム（`~/.claude/commands/`）— それ以外
-
-### 前提条件: Codex CLI のセットアップ
-
-> **Codex CLI が未インストールでも `/hey-codex` は起動可能。** 起動時に未検出なら、インストールするか確認される。
-
-#### 1. Codex CLI のインストール
+- [Claude Code](https://claude.com/claude-code)
+- Node.js 22+（`npx tsx` でフック実行）
+- [Codex CLI](https://github.com/openai/codex) 0.99.0+（オプション — 未インストールでもフックは動作）
 
 ```bash
-npm install -g @openai/codex    # latest: 0.99.0
+# Codex CLI のインストール
+npm install -g @openai/codex
+
+# 認証
+codex login                    # ブラウザ認証
+# または
+export OPENAI_API_KEY="sk-..."  # API キー
 ```
 
-> Node.js 22+ が必要。
-
-#### 2. 認証
-
-```bash
-# ブラウザ認証（ChatGPT / OpenAI アカウント）
-codex login
-
-# または API キー
-export OPENAI_API_KEY="sk-..."
-```
-
-#### 3. `~/.codex/config.toml`（オプション）
-
-未設定でもデフォルト値で動作する。モデルを変えたい場合のみ:
-
-```toml
-model = "gpt-5.3-codex"    # デフォルト: gpt-5.3-codex
-```
-
-## 使い方
-
-Claude Code 内で以下のコマンドを実行:
+## アーキテクチャ
 
 ```
-/hey-codex
-```
-
-起動後のフロー:
-
-1. **アップデートチェック** — VERSION 比較で最新版に自動更新
-2. **Codex CLI ステータス確認** — バージョン、モデル、認証状態
-3. **モード選択**:
-   - **Consult（合議）** — 設計・アーキテクチャの相談
-   - **Implement（実装委譲）** — コード生成を Codex に任せる
-   - **Check（矛盾チェック）** — AGENTS.md と CLAUDE.md の比較
-4. **実行と報告** — Codex Council Report フォーマットで結果を表示
-
-## スキル構成
-
-```
-commands/
-    hey-codex.md                # エントリポイント（/hey-codex で起動）
-    skills/
-        council-protocol.md     # 委譲プロトコル（いつ・どのように委譲するか）
-        contradiction-check.md  # 矛盾検出プロトコル
+rules/
+    codex-delegation.md         # 常時適用の委譲ルール (MUST/SHOULD/MUST NOT)
+hooks/
+    agent-router.ts             # UserPromptSubmit: キーワードから委譲レベルを判定
+    check-codex-before-write.ts # PreToolUse: CI/CD・シェルスクリプト編集時にリマインド
+    post-implementation-review.ts # PostToolUse: 3+ファイル編集後にレビュー提案
+settings/
+    hooks.json                  # フック登録テンプレート
 scripts/
     council.sh                  # codex exec ラッパースクリプト
-examples/
-    AGENTS.md                   # プロジェクト用テンプレート（英語）
-    AGENTS.ja.md                # プロジェクト用テンプレート（日本語）
 ```
 
-| ファイル | 役割 |
-|----------|------|
-| `hey-codex.md` | エントリポイント。アップデートチェック後、モード選択・実行 |
-| `council-protocol.md` | 合議・実装委譲の判断基準とプロンプトテンプレート |
-| `contradiction-check.md` | AGENTS.md と CLAUDE.md の矛盾検出・報告手順 |
-| `council.sh` | Codex CLI ラッパー。AGENTS.md 自動検出・プロンプト合成・実行 |
+## Hooks
+
+### agent-router.ts (UserPromptSubmit)
+
+ユーザー入力のキーワードから委譲レベルを判定。
+
+- `ci/cd`, `shell script`, `prototype` 等 → **MUST delegate**
+- `設計`, `review`, `performance` 等 → **SHOULD delegate**
+- `refactor`, `security`, `auth` 等 → **KEEP**（委譲しない）
+
+### check-codex-before-write.ts (PreToolUse)
+
+ファイル書き込み前にパスをチェック。
+
+- `.github/workflows/*` → CI/CD リマインド
+- `*.sh`, `*.bash` → シェルスクリプト リマインド
+- `Dockerfile`, `docker-compose.*` → インフラ リマインド
+
+### post-implementation-review.ts (PostToolUse)
+
+編集ファイル数を追跡し、閾値でレビューを提案。
+
+- 3ファイル以上編集 → Codex レビュー提案
+- CI/CD・シェルスクリプト変更 → 検証提案
 
 ## council.sh
 
@@ -104,38 +84,29 @@ Codex CLI の実行を抽象化するラッパースクリプト。
 # ステータス確認
 council.sh status
 
-# 合議（読み取り専用サンドボックス）
+# 合議（read-only サンドボックス）
 council.sh consult prompt.txt /path/to/project
 
-# 実装委譲（ワークスペース書き込み可）
+# 実装委譲（workspace-write サンドボックス）
 council.sh implement prompt.txt /path/to/project
 ```
 
-**AGENTS.md 自動検出:** プロジェクトに `AGENTS.md` または `.agents/rules/base.md` があれば、プロンプトの先頭に自動注入される。
+**AGENTS.md 自動検出:** プロジェクトに `AGENTS.md` があれば、プロンプトの先頭に自動注入。
 
-## 委譲判断基準
+## 無効化
 
-### 合議 (Consult) すべき場面
+```bash
+# ルールのみ無効化
+rm .claude/rules/codex-delegation.md
 
-- アーキテクチャの大きな判断（DB、フレームワーク、設計パターン選定）
-- 複数アプローチがあり、トレードオフが不明確
-- セキュリティ・パフォーマンスに関わる設計判断
+# フックのみ無効化
+rm -rf .claude/hooks/hey-codex/
 
-### 実装委譲 (Implement) すべき場面
-
-- ボイラープレート生成（CRUD、設定ファイル、テストスケルトン）
-- 大量のコード生成が必要で、要件が明確
-- コンテキストウィンドウを節約したい大きな実装
-
-## AGENTS.md テンプレート
-
-プロジェクトに `AGENTS.md` を配置すると、Codex CLI がそれに従って作業する。テンプレートは `examples/` に用意:
-
-- `examples/AGENTS.md` — 日本語版
-- `examples/AGENTS.en.md` — 英語版
+# 完全に無効化 (settings.json のフック登録も手動削除)
+```
 
 ## 技術スタック
 
 - [Claude Code](https://claude.com/claude-code)（Claude Opus 4.6）
 - [Codex CLI](https://github.com/openai/codex) 0.99.0+（デフォルト: [gpt-5.3-codex](https://openai.com/index/introducing-gpt-5-3-codex/)）
-- Bash（MCP 不使用）
+- TypeScript（hooks）+ Bash（council.sh）
